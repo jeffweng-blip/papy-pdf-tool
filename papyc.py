@@ -104,7 +104,7 @@ def generate_pdf_buffer(selected_option, info_data, final_text):
 st.set_page_config(page_title="PAPY輸出文字", page_icon="📄")
 
 st.title("📄 PAPY輸出文字")
-st.caption("v2.2 - 勾選自動帶入文字框")
+st.caption("v2.3 - 修正清除按鈕錯誤")
 
 # 載入資料
 items_data, info_data, checkbox_data = load_ini_data()
@@ -113,21 +113,35 @@ items_data, info_data, checkbox_data = load_ini_data()
 if "details_text" not in st.session_state:
     st.session_state.details_text = ""
 
+# 確保每個 checkbox 的狀態都有被初始化
+for i in range(len(checkbox_data)):
+    if f"cb_{i}" not in st.session_state:
+        st.session_state[f"cb_{i}"] = False
+
 # ==========================================
-# 定義 Checkbox 點擊時的自動輸入動作
+# 定義 Checkbox 點擊動作
 # ==========================================
 def on_cb_change(cb_key, cb_text):
     current_text = st.session_state.details_text
-    if st.session_state[cb_key]: # 如果被打勾
+    if st.session_state[cb_key]: 
         if cb_text not in current_text:
             if current_text.strip():
                 st.session_state.details_text = current_text + "\n" + cb_text
             else:
                 st.session_state.details_text = cb_text
-    else: # 如果被取消打勾
-        # 把該段文字從文字框裡面抽掉
+    else: 
         new_text = current_text.replace("\n" + cb_text, "").replace(cb_text, "").strip()
         st.session_state.details_text = new_text
+
+# ==========================================
+# 【新增】定義「清除按鈕」的專屬動作
+# ==========================================
+def clear_all():
+    # 1. 清空文字
+    st.session_state.details_text = ""
+    # 2. 取消所有勾選框
+    for i in range(len(checkbox_data)):
+        st.session_state[f"cb_{i}"] = False
 
 col1, col2 = st.columns([1, 1])
 
@@ -136,23 +150,16 @@ with col2:
     selected_option = st.selectbox("專案名稱", items_data)
     st.markdown(f"**付款方式：** {info_data['payment']} | **姓名：** {info_data['name']} | **工號：** {info_data['work_id']}")
     
-    # 【重點修改】：透過 key="details_text" 把輸入框跟系統記憶綁定在一起
     st.text_area("商品細節", height=150, key="details_text")
     
     st.markdown("##### 📌 附加選項 (可複選)")
     
-    # 為了避免文字被擠壓，改成 3 個一排自動換行
     cb_cols = st.columns(3)
     checked_names = []
     
     for i, cb in enumerate(checkbox_data):
         cb_key = f"cb_{i}"
-        
-        # 確保每個 checkbox 都有初始狀態
-        if cb_key not in st.session_state:
-            st.session_state[cb_key] = False
 
-        # 建立 Checkbox，並告訴它被點擊時要去執行上方定義的 on_cb_change 函式
         is_checked = cb_cols[i % 3].checkbox(
             cb['name'],
             key=cb_key,
@@ -163,18 +170,12 @@ with col2:
         if is_checked:
             checked_names.append(cb['name'])
 
-    if st.button("🗑️ 清除內容"):
-        # 清除文字框
-        st.session_state.details_text = ""
-        # 把所有勾選框退回「未勾選」狀態
-        for i in range(len(checkbox_data)):
-            st.session_state[f"cb_{i}"] = False
-        st.rerun()
+    # 【重點修改】：把 if st.button 拿掉，改成利用 on_click 來觸發清除函式
+    st.button("🗑️ 清除內容", on_click=clear_all)
 
 with col1: 
     st.subheader("預覽畫面")
     
-    # 因為勾選的文字已經直接被塞進 text_area 了，所以直接拿來顯示就好
     final_details = st.session_state.details_text
 
     preview_content = (
@@ -189,7 +190,6 @@ with col1:
     st.info(preview_content.replace('\n', '  \n')) 
     st.divider() 
     
-    # 檔名處理邏輯
     time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     if checked_names:
         cb_names_str = "_".join(checked_names)

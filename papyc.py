@@ -8,17 +8,15 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.pagesizes import A4
 
-# --- 1. 讀取 INI 設定檔邏輯 (新增 Checkbox 設定) ---
+# --- 1. 讀取 INI 設定檔邏輯 ---
 @st.cache_data 
 def load_ini_data():
     ini_filename = 'settings.ini'
     config = configparser.ConfigParser()
     
-    # 預設的基本設定
     default_options = {'items': 'SAKAA57006 三鶯媽祖田, SAKM167005 三鶯AFC, SAKAA53010 環一多元支付'}
     default_user = {'payment_method': 'PAPY', 'name': '翁振家', 'work_id': 'D958'}
     
-    # 預設的 5 個 Checkbox 設定 (名稱與對應文字)
     default_checkboxes = {
         'cb1_name': '急件',     'cb1_text': '【備註】：此為急件，請盡速處理。',
         'cb2_name': '附明細',   'cb2_text': '【備註】：已檢附相關明細表。',
@@ -27,7 +25,6 @@ def load_ini_data():
         'cb5_name': '特殊專案', 'cb5_text': '【備註】：此為特殊專案，請依專案流程辦理。'
     }
     
-    # 檢查檔案是否存在，不存在則建立全套預設值
     if not os.path.exists(ini_filename):
         config['Options'] = default_options
         config['UserInfo'] = default_user
@@ -36,13 +33,11 @@ def load_ini_data():
             config.write(f)
     else:
         config.read(ini_filename, encoding='utf-8')
-        # 如果舊檔案沒有 Checkboxes 區塊，幫它補上去並存檔
         if 'Checkboxes' not in config:
             config['Checkboxes'] = default_checkboxes
             with open(ini_filename, 'w', encoding='utf-8') as f:
                 config.write(f)
 
-    # 讀取專案與使用者資訊
     try:
         items_str = config.get('Options', 'items', fallback="找不到選項")
         items_list = [item.strip() for item in items_str.split(',')]
@@ -55,7 +50,6 @@ def load_ini_data():
         'work_id': config.get('UserInfo', 'work_id', fallback="N/A")
     }
     
-    # 讀取 Checkbox 資訊 (裝成一個 List)
     checkbox_data = []
     for i in range(1, 6):
         cb_name = config.get('Checkboxes', f'cb{i}_name', fallback=f'選項{i}')
@@ -81,7 +75,7 @@ def generate_pdf_buffer(selected_option, info_data, final_text):
         f"付款：{info_data['payment']}\n"
         f"姓名：{info_data['name']}\n"
         f"工號：{info_data['work_id']}\n"
-        f"------------------------------------------------\n"
+        f"-----------------------------------------------------\n"
         f"細節：\n{final_text}"
     )
 
@@ -110,7 +104,7 @@ def generate_pdf_buffer(selected_option, info_data, final_text):
 st.set_page_config(page_title="PAPY輸出文字", page_icon="📄")
 
 st.title("📄 PAPY輸出文字")
-st.caption("v2.1 - 支援快速勾選標籤")
+st.caption("v2.2 - 勾選自動帶入文字框")
 
 # 載入資料
 items_data, info_data, checkbox_data = load_ini_data()
@@ -119,50 +113,69 @@ items_data, info_data, checkbox_data = load_ini_data()
 if "details_text" not in st.session_state:
     st.session_state.details_text = ""
 
+# ==========================================
+# 定義 Checkbox 點擊時的自動輸入動作
+# ==========================================
+def on_cb_change(cb_key, cb_text):
+    current_text = st.session_state.details_text
+    if st.session_state[cb_key]: # 如果被打勾
+        if cb_text not in current_text:
+            if current_text.strip():
+                st.session_state.details_text = current_text + "\n" + cb_text
+            else:
+                st.session_state.details_text = cb_text
+    else: # 如果被取消打勾
+        # 把該段文字從文字框裡面抽掉
+        new_text = current_text.replace("\n" + cb_text, "").replace(cb_text, "").strip()
+        st.session_state.details_text = new_text
+
 col1, col2 = st.columns([1, 1])
 
 with col2: 
     st.subheader("設定與輸入")
-    
     selected_option = st.selectbox("專案名稱", items_data)
-    
     st.markdown(f"**付款方式：** {info_data['payment']} | **姓名：** {info_data['name']} | **工號：** {info_data['work_id']}")
     
-    input_text = st.text_area("商品細節", value=st.session_state.details_text, height=150)
+    # 【重點修改】：透過 key="details_text" 把輸入框跟系統記憶綁定在一起
+    st.text_area("商品細節", height=150, key="details_text")
     
-    # ---------------- 新增 Checkbox 區塊 ----------------
     st.markdown("##### 📌 附加選項 (可複選)")
     
-    # 將五個選項排成一排 (如果覺得太擠，可以把 columns(5) 改成 columns(3) 或換行)
-    cb_cols = st.columns(5)
-    checked_items = []  # 用來收集被勾選的項目
+    # 為了避免文字被擠壓，改成 3 個一排自動換行
+    cb_cols = st.columns(3)
+    checked_names = []
     
     for i, cb in enumerate(checkbox_data):
-        # 建立 Checkbox
-        is_checked = cb_cols[i].checkbox(cb['name'], key=f"cb_{i}")
+        cb_key = f"cb_{i}"
+        
+        # 確保每個 checkbox 都有初始狀態
+        if cb_key not in st.session_state:
+            st.session_state[cb_key] = False
+
+        # 建立 Checkbox，並告訴它被點擊時要去執行上方定義的 on_cb_change 函式
+        is_checked = cb_cols[i % 3].checkbox(
+            cb['name'],
+            key=cb_key,
+            on_change=on_cb_change,
+            args=(cb_key, cb['text'])
+        )
+        
         if is_checked:
-            checked_items.append(cb)
-    # --------------------------------------------------
+            checked_names.append(cb['name'])
 
     if st.button("🗑️ 清除內容"):
+        # 清除文字框
         st.session_state.details_text = ""
+        # 把所有勾選框退回「未勾選」狀態
+        for i in range(len(checkbox_data)):
+            st.session_state[f"cb_{i}"] = False
         st.rerun()
-    else:
-        st.session_state.details_text = input_text
 
 with col1: 
     st.subheader("預覽畫面")
     
-    # 組合最終文字：自己打的細節 + 勾選產生的文字
+    # 因為勾選的文字已經直接被塞進 text_area 了，所以直接拿來顯示就好
     final_details = st.session_state.details_text
-    
-    # 如果有勾選東西，就把對應的文字加到細節下方
-    if checked_items:
-        added_text = "\n".join([item['text'] for item in checked_items])
-        if final_details.strip(): # 如果原本有打字，加個空行分隔
-            final_details += f"\n\n{added_text}"
-        else:
-            final_details += added_text
 
     preview_content = (
         f"專案：{selected_option}\n"
@@ -176,16 +189,13 @@ with col1:
     st.info(preview_content.replace('\n', '  \n')) 
     st.divider() 
     
-    # ---------------- 檔名處理邏輯 ----------------
+    # 檔名處理邏輯
     time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    
-    # 如果有勾選，檔名就加上勾選的名稱 (例如: 20260502-105300_急件_已覆核.pdf)
-    if checked_items:
-        cb_names_str = "_".join([item['name'] for item in checked_items])
+    if checked_names:
+        cb_names_str = "_".join(checked_names)
         pdf_filename = f"{time_str}_{cb_names_str}.pdf"
     else:
         pdf_filename = f"{time_str}.pdf"
-    # ----------------------------------------------
     
     pdf_buffer = generate_pdf_buffer(selected_option, info_data, final_details)
     

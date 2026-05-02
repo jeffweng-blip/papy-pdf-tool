@@ -8,26 +8,41 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.pagesizes import A4
 
-# --- 1. 讀取 INI 設定檔邏輯 ---
-@st.cache_data # 使用 cache 避免每次重新整理網頁都重讀檔案
+# --- 1. 讀取 INI 設定檔邏輯 (新增 Checkbox 設定) ---
+@st.cache_data 
 def load_ini_data():
     ini_filename = 'settings.ini'
     config = configparser.ConfigParser()
     
+    # 預設的基本設定
+    default_options = {'items': 'SAKAA57006 三鶯媽祖田, SAKM167005 三鶯AFC, SAKAA53010 環一多元支付'}
+    default_user = {'payment_method': 'PAPY', 'name': '翁振家', 'work_id': 'D958'}
+    
+    # 預設的 5 個 Checkbox 設定 (名稱與對應文字)
+    default_checkboxes = {
+        'cb1_name': '急件',     'cb1_text': '【備註】：此為急件，請盡速處理。',
+        'cb2_name': '附明細',   'cb2_text': '【備註】：已檢附相關明細表。',
+        'cb3_name': '需回簽',   'cb3_text': '【備註】：請於確認後簽名回傳。',
+        'cb4_name': '已覆核',   'cb4_text': '【備註】：本文件已由主管覆核完畢。',
+        'cb5_name': '特殊專案', 'cb5_text': '【備註】：此為特殊專案，請依專案流程辦理。'
+    }
+    
+    # 檢查檔案是否存在，不存在則建立全套預設值
     if not os.path.exists(ini_filename):
-        config['Options'] = {
-            'items': 'SAKAA57006 三鶯媽祖田, SAKM167005 三鶯AFC, SAKAA53010 環一多元支付'
-        }
-        config['UserInfo'] = {
-            'payment_method': 'PAPY',
-            'name': '翁振家',
-            'work_id': 'D958'
-        }
+        config['Options'] = default_options
+        config['UserInfo'] = default_user
+        config['Checkboxes'] = default_checkboxes
         with open(ini_filename, 'w', encoding='utf-8') as f:
             config.write(f)
     else:
         config.read(ini_filename, encoding='utf-8')
+        # 如果舊檔案沒有 Checkboxes 區塊，幫它補上去並存檔
+        if 'Checkboxes' not in config:
+            config['Checkboxes'] = default_checkboxes
+            with open(ini_filename, 'w', encoding='utf-8') as f:
+                config.write(f)
 
+    # 讀取專案與使用者資訊
     try:
         items_str = config.get('Options', 'items', fallback="找不到選項")
         items_list = [item.strip() for item in items_str.split(',')]
@@ -39,37 +54,41 @@ def load_ini_data():
         'name': config.get('UserInfo', 'name', fallback="N/A"),
         'work_id': config.get('UserInfo', 'work_id', fallback="N/A")
     }
-    return items_list, user_info
+    
+    # 讀取 Checkbox 資訊 (裝成一個 List)
+    checkbox_data = []
+    for i in range(1, 6):
+        cb_name = config.get('Checkboxes', f'cb{i}_name', fallback=f'選項{i}')
+        cb_text = config.get('Checkboxes', f'cb{i}_text', fallback='')
+        checkbox_data.append({'name': cb_name, 'text': cb_text})
+        
+    return items_list, user_info, checkbox_data
 
-# --- 2. 產生 PDF 的邏輯 (改為在記憶體中產生，方便網頁下載) ---
-def generate_pdf_buffer(selected_option, info_data, input_text):
-    # 準備字型 (注意：如果要上傳到雲端，字型檔必須放在同一個資料夾)
-    font_path = r"C:\Windows\Fonts\msjh.ttc"  # Windows 本機測試用
+# --- 2. 產生 PDF 的邏輯 ---
+def generate_pdf_buffer(selected_option, info_data, final_text):
+    font_path = r"C:\Windows\Fonts\msjh.ttc"  
     if not os.path.exists(font_path):
-        font_path = "msjh.ttc" # 雲端備用路徑 (請將字型檔複製到程式同資料夾)
+        font_path = "msjh.ttc" 
         
     if not os.path.exists(font_path):
-         st.error("找不到中文字型檔！如果您要部署到雲端，請將 msjh.ttc 放在與 app.py 相同的資料夾中。")
+         st.error("找不到中文字型檔！")
          return None
 
     pdfmetrics.registerFont(TTFont('MyFont', font_path))
     
-    # 組合預覽文字
     content = (
         f"專案：{selected_option}\n"
         f"付款：{info_data['payment']}\n"
         f"姓名：{info_data['name']}\n"
         f"工號：{info_data['work_id']}\n"
         f"-----------------------------------------------------\n"
-        f"細節：\n{input_text}"
+        f"細節：\n{final_text}"
     )
 
-    # 建立一個記憶體緩衝區來存放 PDF
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     c.setFont('MyFont', 26) 
     
-    # 逐行寫入 PDF
     x_position = 50   
     y_position = 780  
     line_spacing = 35 
@@ -84,71 +103,91 @@ def generate_pdf_buffer(selected_option, info_data, input_text):
             y_position = 780
             
     c.save()
-    buffer.seek(0) # 將指標移回檔案開頭
+    buffer.seek(0)
     return buffer
 
 # --- 3. Streamlit 網頁介面設計 ---
 st.set_page_config(page_title="PAPY輸出文字", page_icon="📄")
 
 st.title("📄 PAPY輸出文字")
-st.caption("v2.0 - 網頁版")
+st.caption("v2.1 - 支援快速勾選標籤")
 
 # 載入資料
-items_data, info_data = load_ini_data()
+items_data, info_data, checkbox_data = load_ini_data()
 
-# 初始化 session_state (用來處理清除文字框的功能)
+# 初始化 session_state
 if "details_text" not in st.session_state:
     st.session_state.details_text = ""
 
-# 介面佈局：分為左右兩欄
 col1, col2 = st.columns([1, 1])
 
-with col2: # 右半部 (輸入區)
+with col2: 
     st.subheader("設定與輸入")
     
-    # 下拉選單
     selected_option = st.selectbox("專案名稱", items_data)
     
-    # 顯示使用者資訊 (Markdown 格式)
-    st.markdown(f"""
-    **付款方式：** {info_data['payment']} | **姓名：** {info_data['name']} | **工號：** {info_data['work_id']}
-    """)
+    st.markdown(f"**付款方式：** {info_data['payment']} | **姓名：** {info_data['name']} | **工號：** {info_data['work_id']}")
     
-    # 商品細節輸入
-    input_text = st.text_area("商品細節", value=st.session_state.details_text, height=200)
+    input_text = st.text_area("商品細節", value=st.session_state.details_text, height=150)
     
-    # 清除按鈕
+    # ---------------- 新增 Checkbox 區塊 ----------------
+    st.markdown("##### 📌 附加選項 (可複選)")
+    
+    # 將五個選項排成一排 (如果覺得太擠，可以把 columns(5) 改成 columns(3) 或換行)
+    cb_cols = st.columns(5)
+    checked_items = []  # 用來收集被勾選的項目
+    
+    for i, cb in enumerate(checkbox_data):
+        # 建立 Checkbox
+        is_checked = cb_cols[i].checkbox(cb['name'], key=f"cb_{i}")
+        if is_checked:
+            checked_items.append(cb)
+    # --------------------------------------------------
+
     if st.button("🗑️ 清除內容"):
-        # Streamlit 無法直接清空 text_area，需透過重新載入頁面來清空 (透過 key 或實驗性功能，這裡用簡單的重載體驗)
         st.session_state.details_text = ""
         st.rerun()
     else:
-        # 即時將輸入文字存入 session_state
         st.session_state.details_text = input_text
 
-with col1: # 左半部 (預覽與輸出)
+with col1: 
     st.subheader("預覽畫面")
     
+    # 組合最終文字：自己打的細節 + 勾選產生的文字
+    final_details = st.session_state.details_text
+    
+    # 如果有勾選東西，就把對應的文字加到細節下方
+    if checked_items:
+        added_text = "\n".join([item['text'] for item in checked_items])
+        if final_details.strip(): # 如果原本有打字，加個空行分隔
+            final_details += f"\n\n{added_text}"
+        else:
+            final_details += added_text
+
     preview_content = (
         f"專案：{selected_option}\n"
         f"付款：{info_data['payment']}\n"
         f"姓名：{info_data['name']}\n"
         f"工號：{info_data['work_id']}\n"
         f"----------------------------------------\n"
-        f"細節：\n{st.session_state.details_text}"
+        f"細節：\n{final_details}"
     )
     
-    # 用一個有底色的框框顯示預覽
     st.info(preview_content.replace('\n', '  \n')) 
+    st.divider() 
     
-    st.divider() # 分隔線
-    
-    # 產生 PDF 按鈕與下載按鈕
+    # ---------------- 檔名處理邏輯 ----------------
     time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    pdf_filename = f"{time_str}.pdf"
     
-    # 呼叫產生 PDF 的函式
-    pdf_buffer = generate_pdf_buffer(selected_option, info_data, st.session_state.details_text)
+    # 如果有勾選，檔名就加上勾選的名稱 (例如: 20260502-105300_急件_已覆核.pdf)
+    if checked_items:
+        cb_names_str = "_".join([item['name'] for item in checked_items])
+        pdf_filename = f"{time_str}_{cb_names_str}.pdf"
+    else:
+        pdf_filename = f"{time_str}.pdf"
+    # ----------------------------------------------
+    
+    pdf_buffer = generate_pdf_buffer(selected_option, info_data, final_details)
     
     if pdf_buffer:
         st.download_button(

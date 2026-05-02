@@ -75,7 +75,7 @@ def generate_pdf_buffer(selected_option, info_data, final_text):
         f"付款：{info_data['payment']}\n"
         f"姓名：{info_data['name']}\n"
         f"工號：{info_data['work_id']}\n"
-        f"-----------------------------------------------------\n"
+        f"------------------------------------------------\n"
         f"細節：\n{final_text}"
     )
 

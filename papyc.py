@@ -11,14 +11,11 @@ from reportlab.lib.pagesizes import A4
 # --- 3. Streamlit 網頁介面設計 (包含隱藏的 CSS 魔法) ---
 st.set_page_config(page_title="PAPY輸出文字", page_icon="📄")
 
-# 【重點修改】：注入 CSS 語法，強制按鈕文字不換行、微調字體大小
 st.markdown("""
     <style>
-    /* 強制按鈕絕對不換行 */
     div[data-testid="stButton"] button {
         white-space: nowrap !important;
     }
-    /* 將按鈕內的文字稍微縮小 */
     div[data-testid="stButton"] button p {
         font-size: 14px !important;
     }
@@ -26,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📄 PAPY輸出文字")
-st.caption("v3.0 - 強制按鈕排版優化")
+st.caption("v3.1 - 編輯區與預覽區獨立脫鉤")
 
 # --- 1. 讀取 INI 設定檔邏輯 ---
 @st.cache_data 
@@ -137,14 +134,18 @@ def generate_pdf_buffer(selected_option, selected_name, target_work_id, info_dat
 
 items_data, info_data, checkbox_data = load_ini_data()
 
+# 【重點修改】：把「編輯區」與「預覽區」的記憶體分開
 if "details_text" not in st.session_state:
     st.session_state.details_text = ""
+if "preview_text" not in st.session_state:
+    st.session_state.preview_text = ""
 
 for i in range(len(checkbox_data)):
     if f"cb_{i}" not in st.session_state:
         st.session_state[f"cb_{i}"] = False
 
 def on_cb_change(changed_cb_key, changed_cb_text, cb_data):
+    # 勾選選項時，只會改變編輯區的文字 (details_text)
     current_text = st.session_state.details_text
     
     if st.session_state[changed_cb_key]: 
@@ -165,9 +166,15 @@ def on_cb_change(changed_cb_key, changed_cb_text, cb_data):
         st.session_state.details_text = new_text
 
 def clear_all():
+    # 清除時，兩邊一起清空
     st.session_state.details_text = ""
+    st.session_state.preview_text = ""
     for i in range(len(checkbox_data)):
         st.session_state[f"cb_{i}"] = False
+
+# 【重點修改】：貼入預覽按鈕專屬動作，將草稿正式寫入預覽區
+def update_preview():
+    st.session_state.preview_text = st.session_state.details_text
 
 col1, col2 = st.columns([1, 1])
 
@@ -183,18 +190,18 @@ with col2:
     st.markdown(f"**付款方式：** {info_data['payment']} &nbsp;&nbsp;|&nbsp;&nbsp; **自動帶入工號：** `{current_work_id}`")
     st.write("") 
     
-    # 【重點修改】：重新分配欄位寬度，把更多空間給兩顆按鈕
     col_lbl, col_btn1, col_btn2 = st.columns([0.8, 1.2, 1.2])
     
     with col_lbl:
-        st.markdown("<div style='margin-top: 15px;'> <b>商品細節</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 15px;'>💬 <b>商品細節</b></div>", unsafe_allow_html=True)
         
     with col_btn1:
-        # 開啟 use_container_width 配合外掛 CSS，確保填滿又不換行
-        st.button(" 貼入預覽", use_container_width=True)
+        # 取消圖示，綁定貼入預覽的動作
+        st.button("貼入預覽", on_click=update_preview, use_container_width=True)
         
     with col_btn2:
-        st.button(" 清除內容", on_click=clear_all, use_container_width=True)
+        # 取消圖示
+        st.button("清除內容", on_click=clear_all, use_container_width=True)
 
     st.text_area("商品細節", height=150, key="details_text", label_visibility="collapsed")
     
@@ -219,7 +226,8 @@ with col2:
 with col1: 
     st.subheader("預覽畫面")
     
-    final_details = st.session_state.details_text
+    # 【重點修改】：左邊預覽與 PDF 改為讀取 preview_text
+    final_details = st.session_state.preview_text
     
     preview_content = (
         f"專案：{selected_option}\n"

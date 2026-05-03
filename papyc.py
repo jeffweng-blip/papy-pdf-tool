@@ -15,10 +15,7 @@ def load_ini_data():
     config = configparser.ConfigParser()
     
     default_options = {'items': 'SAKAA57006 三鶯媽祖田, SAKM167005 三鶯AFC, SAKAA53010 環一多元支付'}
-    
-    # 預設使用者格式：姓名:工號
     default_user = {'payment_method': 'PAPY', 'users': '翁振家:D958, 王大明:D123, 李小華:D456'}
-    
     default_checkboxes = {
         'cb1_name': '急件',     'cb1_text': '【備註】：此為急件，請盡速處理。',
         'cb2_name': '附明細',   'cb2_text': '【備註】：已檢附相關明細表。',
@@ -46,7 +43,6 @@ def load_ini_data():
     except:
         items_list = ["資料錯誤"]
 
-    # 解析「姓名:工號」對應表
     users_dict = {}
     try:
         if config.has_option('UserInfo', 'users'):
@@ -56,7 +52,6 @@ def load_ini_data():
                     name, wid = pair.split(':')
                     users_dict[name.strip()] = wid.strip()
         else:
-            # 相容舊版單一格式
             fallback_name = config.get('UserInfo', 'name', fallback='翁振家')
             fallback_wid = config.get('UserInfo', 'work_id', fallback='D958')
             users_dict[fallback_name] = fallback_wid
@@ -122,33 +117,43 @@ def generate_pdf_buffer(selected_option, selected_name, target_work_id, info_dat
 st.set_page_config(page_title="PAPY輸出文字", page_icon="📄")
 
 st.title("📄 PAPY輸出文字")
-st.caption("v2.5 - 姓名與工號自動連動")
+st.caption("v2.6 - 附加選項改為單選模式")
 
 items_data, info_data, checkbox_data = load_ini_data()
 
 if "details_text" not in st.session_state:
     st.session_state.details_text = ""
 
-# 初始化各個 checkbox 的狀態
 for i in range(len(checkbox_data)):
     if f"cb_{i}" not in st.session_state:
         st.session_state[f"cb_{i}"] = False
 
-# Checkbox 變動時的處理
-def on_cb_change(cb_key, cb_text):
+# ==========================================
+# 【重點修改】單選邏輯 (互斥選擇)
+# ==========================================
+def on_cb_change(changed_cb_key, changed_cb_text, cb_data):
     current_text = st.session_state.details_text
-    if st.session_state[cb_key]: 
-        if cb_text not in current_text:
+    
+    if st.session_state[changed_cb_key]: 
+        # 1. 掃描其他的選項，如果有人打勾，就把它取消並抽掉文字
+        for i, item in enumerate(cb_data):
+            other_key = f"cb_{i}"
+            if other_key != changed_cb_key and st.session_state[other_key]:
+                st.session_state[other_key] = False # 取消打勾
+                other_text = item['text']
+                current_text = current_text.replace("\n" + other_text, "").replace(other_text, "").strip()
+        
+        # 2. 補上自己這次選的文字
+        if changed_cb_text not in current_text:
             if current_text.strip():
-                st.session_state.details_text = current_text + "\n" + cb_text
+                st.session_state.details_text = current_text + "\n" + changed_cb_text
             else:
-                st.session_state.details_text = cb_text
+                st.session_state.details_text = changed_cb_text
     else: 
-        # 移除文字時處理換行符
-        new_text = current_text.replace("\n" + cb_text, "").replace(cb_text, "").strip()
+        # 單純手動取消勾選時，只移除自己的文字
+        new_text = current_text.replace("\n" + changed_cb_text, "").replace(changed_cb_text, "").strip()
         st.session_state.details_text = new_text
 
-# 清除所有輸入
 def clear_all():
     st.session_state.details_text = ""
     for i in range(len(checkbox_data)):
@@ -161,30 +166,30 @@ with col2:
     
     selected_option = st.selectbox("專案名稱", items_data)
     
-    # 姓名下拉選單
     users_dict = info_data['users_dict']
     selected_name = st.selectbox("選擇姓名", list(users_dict.keys()))
-    
-    # 自動抓取工號
     current_work_id = users_dict.get(selected_name, "N/A")
     
     st.markdown(f"**付款方式：** {info_data['payment']} &nbsp;&nbsp;|&nbsp;&nbsp; **自動帶入工號：** `{current_work_id}`")
     
     st.text_area("商品細節", height=150, key="details_text")
     
-    st.markdown("##### 📌 附加選項 (可複選)")
+    st.markdown("##### 📌 附加選項 (單選)")
     
     cb_cols = st.columns(3)
     checked_names = []
     
     for i, cb in enumerate(checkbox_data):
         cb_key = f"cb_{i}"
+        
         is_checked = cb_cols[i % 3].checkbox(
             cb['name'],
             key=cb_key,
             on_change=on_cb_change,
-            args=(cb_key, cb['text'])
+            # 把 cb_data 傳入函式中供它檢查
+            args=(cb_key, cb['text'], checkbox_data)
         )
+        
         if is_checked:
             checked_names.append(cb['name'])
 
@@ -207,7 +212,6 @@ with col1:
     st.divider() 
     
     time_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    # 檔名加入勾選的標籤名
     if checked_names:
         cb_names_str = "_".join(checked_names)
         pdf_filename = f"{time_str}_{cb_names_str}.pdf"

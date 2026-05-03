@@ -187,14 +187,14 @@ with col2:
     col_lbl, col_btn1, col_btn2 = st.columns([0.8, 1.2, 1.2])
     
     with col_lbl:
-        st.markdown("<div style='margin-top: 15px;'>💬 <b>商品細節</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 15px;'> <b>商品細節</b></div>", unsafe_allow_html=True)
         
     with col_btn1:
         # 開啟 use_container_width 配合外掛 CSS，確保填滿又不換行
-        st.button("➡️ 貼入預覽", use_container_width=True)
+        st.button(" 貼入預覽", use_container_width=True)
         
     with col_btn2:
-        st.button("🗑️ 清除內容", on_click=clear_all, use_container_width=True)
+        st.button(" 清除內容", on_click=clear_all, use_container_width=True)
 
     st.text_area("商品細節", height=150, key="details_text", label_visibility="collapsed")
     

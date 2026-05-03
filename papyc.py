@@ -83,7 +83,6 @@ def generate_pdf_buffer(selected_option, selected_name, target_work_id, info_dat
 
     pdfmetrics.registerFont(TTFont('MyFont', font_path))
     
-    # 【重點修改】：把固定的出貨單字樣寫死在 PDF 排版中
     content = (
         f"專案：{selected_option}\n"
         f"付款：{info_data['payment']}\n"
@@ -119,7 +118,7 @@ def generate_pdf_buffer(selected_option, selected_name, target_work_id, info_dat
 st.set_page_config(page_title="PAPY輸出文字", page_icon="📄")
 
 st.title("📄 PAPY輸出文字")
-st.caption("v2.7 - 新增底部固定文字")
+st.caption("v2.8 - 介面優化與按鈕重排")
 
 items_data, info_data, checkbox_data = load_ini_data()
 
@@ -167,8 +166,29 @@ with col2:
     current_work_id = users_dict.get(selected_name, "N/A")
     
     st.markdown(f"**付款方式：** {info_data['payment']} &nbsp;&nbsp;|&nbsp;&nbsp; **自動帶入工號：** `{current_work_id}`")
+    st.write("") # 增加一點點垂直間距
     
-    st.text_area("商品細節", height=150, key="details_text")
+    # ==========================================
+    # 【重點修改】：重新排版商品細節與兩顆按鈕
+    # ==========================================
+    # 將畫面切分成三塊比例 (標題佔比較大，兩顆按鈕各佔一半)
+    col_lbl, col_btn1, col_btn2 = st.columns([2, 1.2, 1.2])
+    
+    with col_lbl:
+        # 使用 HTML 語法稍微往下推一點，讓文字跟按鈕對齊
+        st.markdown("<div style='margin-top: 15px;'>💬 <b>商品細節</b></div>", unsafe_allow_html=True)
+        
+    with col_btn1:
+        # 點擊按鈕就會觸發重新整理，把文字「貼」到左邊預覽區
+        st.button("➡️ 貼入預覽", use_container_width=True)
+        
+    with col_btn2:
+        st.button("🗑️ 清除內容", on_click=clear_all, use_container_width=True)
+
+    # 建立文字框，並把原本預設的標籤隱藏起來 (label_visibility="collapsed")
+    st.text_area("商品細節", height=150, key="details_text", label_visibility="collapsed")
+    
+    # ==========================================
     
     st.markdown("##### 📌 附加選項 (單選)")
     
@@ -188,14 +208,13 @@ with col2:
         if is_checked:
             checked_names.append(cb['name'])
 
-    st.button("🗑️ 清除內容", on_click=clear_all)
+    # 原本在最下方的清除按鈕已經搬到上面了，這裡移除。
 
 with col1: 
     st.subheader("預覽畫面")
     
     final_details = st.session_state.details_text
     
-    # 【重點修改】：把固定的出貨單字樣寫死在預覽排版中
     preview_content = (
         f"專案：{selected_option}\n"
         f"付款：{info_data['payment']}\n"

@@ -8,6 +8,26 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.pagesizes import A4
 
+# --- 3. Streamlit 網頁介面設計 (包含隱藏的 CSS 魔法) ---
+st.set_page_config(page_title="PAPY輸出文字", page_icon="📄")
+
+# 【重點修改】：注入 CSS 語法，強制按鈕文字不換行、微調字體大小
+st.markdown("""
+    <style>
+    /* 強制按鈕絕對不換行 */
+    div[data-testid="stButton"] button {
+        white-space: nowrap !important;
+    }
+    /* 將按鈕內的文字稍微縮小 */
+    div[data-testid="stButton"] button p {
+        font-size: 14px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("📄 PAPY輸出文字")
+st.caption("v3.0 - 強制按鈕排版優化")
+
 # --- 1. 讀取 INI 設定檔邏輯 ---
 @st.cache_data 
 def load_ini_data():
@@ -114,11 +134,6 @@ def generate_pdf_buffer(selected_option, selected_name, target_work_id, info_dat
     buffer.seek(0)
     return buffer
 
-# --- 3. Streamlit 網頁介面設計 ---
-st.set_page_config(page_title="PAPY輸出文字", page_icon="📄")
-
-st.title("📄 PAPY輸出文字")
-st.caption("v2.9 - 防止按鈕文字斷行")
 
 items_data, info_data, checkbox_data = load_ini_data()
 
@@ -168,25 +183,20 @@ with col2:
     st.markdown(f"**付款方式：** {info_data['payment']} &nbsp;&nbsp;|&nbsp;&nbsp; **自動帶入工號：** `{current_work_id}`")
     st.write("") 
     
-    # ==========================================
-    # 【重點修改】：調整比例，並移除 use_container_width
-    # ==========================================
-    # 將比例微調，讓按鈕區塊有更寬鬆的空間
-    col_lbl, col_btn1, col_btn2 = st.columns([1.2, 1, 1])
+    # 【重點修改】：重新分配欄位寬度，把更多空間給兩顆按鈕
+    col_lbl, col_btn1, col_btn2 = st.columns([0.8, 1.2, 1.2])
     
     with col_lbl:
         st.markdown("<div style='margin-top: 15px;'>💬 <b>商品細節</b></div>", unsafe_allow_html=True)
         
     with col_btn1:
-        # 移除 use_container_width=True，讓按鈕保持自然長度不斷行
-        st.button("➡️ 貼入預覽")
+        # 開啟 use_container_width 配合外掛 CSS，確保填滿又不換行
+        st.button("➡️ 貼入預覽", use_container_width=True)
         
     with col_btn2:
-        # 移除 use_container_width=True
-        st.button("🗑️ 清除內容", on_click=clear_all)
+        st.button("🗑️ 清除內容", on_click=clear_all, use_container_width=True)
 
     st.text_area("商品細節", height=150, key="details_text", label_visibility="collapsed")
-    # ==========================================
     
     st.markdown("##### 📌 附加選項 (單選)")
     

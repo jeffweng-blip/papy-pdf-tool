@@ -193,7 +193,7 @@ with col2:
     col_lbl, col_btn1, col_btn2 = st.columns([0.8, 1.2, 1.2])
     
     with col_lbl:
-        st.markdown("<div style='margin-top: 15px;'>💬 <b>商品細節</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 15px;'> <b>商品細節</b></div>", unsafe_allow_html=True)
         
     with col_btn1:
         # 取消圖示，綁定貼入預覽的動作

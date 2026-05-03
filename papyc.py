@@ -83,13 +83,15 @@ def generate_pdf_buffer(selected_option, selected_name, target_work_id, info_dat
 
     pdfmetrics.registerFont(TTFont('MyFont', font_path))
     
+    # 【重點修改】：把固定的出貨單字樣寫死在 PDF 排版中
     content = (
         f"專案：{selected_option}\n"
         f"付款：{info_data['payment']}\n"
         f"姓名：{selected_name}\n"
         f"工號：{target_work_id}\n"
         f"----------------------------------------\n"
-        f"細節：\n{final_text}"
+        f"細節：\n{final_text}\n\n"
+        f"附上  ☑出貨單  ☑發票"
     )
 
     buffer = io.BytesIO()
@@ -117,7 +119,7 @@ def generate_pdf_buffer(selected_option, selected_name, target_work_id, info_dat
 st.set_page_config(page_title="PAPY輸出文字", page_icon="📄")
 
 st.title("📄 PAPY輸出文字")
-st.caption("v2.6 - 附加選項改為單選模式")
+st.caption("v2.7 - 新增底部固定文字")
 
 items_data, info_data, checkbox_data = load_ini_data()
 
@@ -128,29 +130,23 @@ for i in range(len(checkbox_data)):
     if f"cb_{i}" not in st.session_state:
         st.session_state[f"cb_{i}"] = False
 
-# ==========================================
-# 【重點修改】單選邏輯 (互斥選擇)
-# ==========================================
 def on_cb_change(changed_cb_key, changed_cb_text, cb_data):
     current_text = st.session_state.details_text
     
     if st.session_state[changed_cb_key]: 
-        # 1. 掃描其他的選項，如果有人打勾，就把它取消並抽掉文字
         for i, item in enumerate(cb_data):
             other_key = f"cb_{i}"
             if other_key != changed_cb_key and st.session_state[other_key]:
-                st.session_state[other_key] = False # 取消打勾
+                st.session_state[other_key] = False 
                 other_text = item['text']
                 current_text = current_text.replace("\n" + other_text, "").replace(other_text, "").strip()
         
-        # 2. 補上自己這次選的文字
         if changed_cb_text not in current_text:
             if current_text.strip():
                 st.session_state.details_text = current_text + "\n" + changed_cb_text
             else:
                 st.session_state.details_text = changed_cb_text
     else: 
-        # 單純手動取消勾選時，只移除自己的文字
         new_text = current_text.replace("\n" + changed_cb_text, "").replace(changed_cb_text, "").strip()
         st.session_state.details_text = new_text
 
@@ -186,7 +182,6 @@ with col2:
             cb['name'],
             key=cb_key,
             on_change=on_cb_change,
-            # 把 cb_data 傳入函式中供它檢查
             args=(cb_key, cb['text'], checkbox_data)
         )
         
@@ -199,13 +194,16 @@ with col1:
     st.subheader("預覽畫面")
     
     final_details = st.session_state.details_text
+    
+    # 【重點修改】：把固定的出貨單字樣寫死在預覽排版中
     preview_content = (
         f"專案：{selected_option}\n"
         f"付款：{info_data['payment']}\n"
         f"姓名：{selected_name}\n"
         f"工號：{current_work_id}\n"
         f"----------------------------------------\n"
-        f"細節：\n{final_details}"
+        f"細節：\n{final_details}\n\n"
+        f"附上  ☑出貨單  ☑發票"
     )
     
     st.info(preview_content.replace('\n', '  \n')) 

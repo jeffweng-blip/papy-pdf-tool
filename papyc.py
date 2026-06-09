@@ -23,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📄 PAPY輸出文字")
-st.caption("v3.3 - 修正特殊符號 PDF 顯示問題")
+st.caption("v3.4 - 擴充附加選項至 8 組")
 
 # --- 1. 讀取 INI 設定檔邏輯 ---
 @st.cache_data 
@@ -33,12 +33,17 @@ def load_ini_data():
     
     default_options = {'items': 'SAKAA57006 三鶯媽祖田, SAKM167005 三鶯AFC, SAKAA53010 環一多元支付'}
     default_user = {'payment_method': 'PAPY', 'users': '翁振家:D958, 王大明:D123, 李小華:D456'}
+    
+    # 【修改調整】：新增 cb6、cb7、cb8 的預設內容
     default_checkboxes = {
         'cb1_name': '急件',     'cb1_text': '【備註】：此為急件，請盡速處理。',
         'cb2_name': '附明細',   'cb2_text': '【備註】：已檢附相關明細表。',
         'cb3_name': '需回簽',   'cb3_text': '【備註】：請於確認後簽名回傳。',
         'cb4_name': '已覆核',   'cb4_text': '【備註】：本文件已由主管覆核完畢。',
-        'cb5_name': '特殊專案', 'cb5_text': '【備註】：此為特殊專案，請依專案流程辦理。'
+        'cb5_name': '特殊專案', 'cb5_text': '【備註】：此為特殊專案，請依專案流程辦理。',
+        'cb6_name': '選項6',   'cb6_text': '【備註】：這是選項 6 的文字。',
+        'cb7_name': '選項7',   'cb7_text': '【備註】：這是選項 7 的文字。',
+        'cb8_name': '選項8',   'cb8_text': '【備註】：這是選項 8 的文字。'
     }
     
     if not os.path.exists(ini_filename):
@@ -80,8 +85,9 @@ def load_ini_data():
         'users_dict': users_dict
     }
     
+    # 【重點修改】：將 range(1, 6) 改為 range(1, 9)，讓它一路讀到 cb8
     checkbox_data = []
-    for i in range(1, 6):
+    for i in range(1, 9):
         cb_name = config.get('Checkboxes', f'cb{i}_name', fallback=f'選項{i}')
         cb_text = config.get('Checkboxes', f'cb{i}_text', fallback='')
         checkbox_data.append({'name': cb_name, 'text': cb_text})
@@ -100,7 +106,6 @@ def generate_pdf_buffer(selected_option, selected_name, target_work_id, info_dat
 
     pdfmetrics.registerFont(TTFont('MyFont', font_path))
     
-    # 【重點修改】：將特殊符號改為 [V] 確保 PDF 能正常輸出
     content = (
         f"專案：{selected_option}\n"
         f"付款：{info_data['payment']}\n"
@@ -223,12 +228,11 @@ with col1:
     
     final_details = st.session_state.preview_text
     
-    # 【重點修改】：同步將網頁預覽的特殊符號改為 [V]
     preview_content = (
         f"專案：{selected_option}\n"
         f"付款：{info_data['payment']}\n"
         f"姓名：{selected_name}\n"
-        f"工號：{current_work_id}\n"
+        f"工號：{target_work_id if 'target_work_id' in locals() else current_work_id}\n"
         f"----------------------------------------\n"
         f"細節：\n{final_details}\n\n"
         f"附上  [V]出貨單  [V]發票"
